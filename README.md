@@ -20,7 +20,7 @@ npm install luffa.js
 ## Quick Start
 
 ```javascript
-import { Client } from "luffa.js";
+import { Client } from "luffa.js"; // 
 
 const client = new Client({
   secret: "your_robot_secret",
