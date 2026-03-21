@@ -1,6 +1,7 @@
 export type Intent =
   | "connect_wallet"
   | "link_address"
+  | "add_token"
   | "generate_watchlist"
   | "get_watchlist"
   | "scan_signals"
@@ -18,8 +19,18 @@ export function detectIntent(text: string): Intent {
     return "connect_wallet";
   }
 
-  if (/^0x[a-fA-F0-9]{40}$/.test(normalized)) {
-    return "link_address";
+  // Message contains a contract address anywhere -> add it to watchlist
+  if (/0x[a-fA-F0-9]{40}/.test(normalized)) {
+    return "add_token";
+  }
+
+  // "add <something>" or "track <something>" or "watch <something>"
+  if (
+    normalized.startsWith("add ") ||
+    normalized.startsWith("track ") ||
+    normalized.startsWith("watch ")
+  ) {
+    return "add_token";
   }
 
   if (

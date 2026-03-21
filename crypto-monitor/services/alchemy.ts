@@ -29,32 +29,80 @@ export interface Token {
 
 export async function getTokens(address: string): Promise<Token[]> {
   const alchemy = getClient();
+
+  console.log(`Fetching token balances for: ${address}`);
+
   const response = await alchemy.core.getTokenBalances(address);
+
+  console.log(
+    `Alchemy returned ${response.tokenBalances.length} token entries`
+  );
+
   const tokens: Token[] = [];
 
   for (const entry of response.tokenBalances) {
-    const rawBalance = parseInt(entry.tokenBalance || "0", 16);
-    if (rawBalance === 0) continue;
+    const hexBalance = entry.tokenBalance || "0x0";
 
-    const metadata = await alchemy.core.getTokenMetadata(
-      entry.contractAddress
-    );
-
-    if (!metadata.name || !metadata.symbol || metadata.decimals === null) {
+    // Use BigInt to handle large token balances without overflow
+    const rawBalance = BigInt(hexBalance);
+    if (rawBalance === 0n) {
       continue;
     }
 
-    const balance = rawBalance / Math.pow(10, metadata.decimals);
+    try {
+      const metadata = await alchemy.core.getTokenMetadata(
+        entry.contractAddress
+      );
 
-    if (balance < SPAM_BALANCE_THRESHOLD) continue;
+      if (
+        !metadata.name ||
+        !metadata.symbol ||
+        metadata.decimals === null ||
+        metadata.decimals === undefined
+      ) {
+        console.log(
+          `Skipping ${entry.contractAddress}: missing metadata (name=${metadata.name}, symbol=${metadata.symbol}, decimals=${metadata.decimals})`
+        );
+        continue;
+      }
 
-    tokens.push({
-      contract_address: entry.contractAddress,
-      token_name: metadata.name,
-      symbol: metadata.symbol,
-      balance,
-    });
+      // Convert BigInt balance to a readable number
+      const divisor = BigInt(10 ** metadata.decimals);
+      const wholePart = rawBalance / divisor;
+      const fractionalPart = rawBalance % divisor;
+      const balance =
+        Number(wholePart) +
+        Number(fractionalPart) / Number(divisor);
+
+      if (balance < SPAM_BALANCE_THRESHOLD) {
+        console.log(
+          `Filtered ${metadata.symbol}: balance ${balance} below threshold`
+        );
+        continue;
+      }
+
+      console.log(
+        `Found token: ${metadata.symbol} (${metadata.name}) - balance: ${balance}`
+      );
+
+      tokens.push({
+        contract_address: entry.contractAddress,
+        token_name: metadata.name,
+        symbol: metadata.symbol,
+        balance,
+      });
+    } catch (err) {
+      console.error(
+        `Failed to fetch metadata for ${entry.contractAddress}:`,
+        err
+      );
+      continue;
+    }
   }
+
+  console.log(
+    `Final result: ${tokens.length} tokens after filtering`
+  );
 
   return tokens;
 }

@@ -128,6 +128,13 @@
       border: 1px solid #991b1b;
     }
 
+    .status.info {
+      display: block;
+      background: #0c1929;
+      color: #60a5fa;
+      border: 1px solid #1e40af;
+    }
+
     .address-display {
       margin-top: 1rem;
       font-family: monospace;
@@ -135,12 +142,22 @@
       color: #888;
       word-break: break-all;
     }
+
+    .tip {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #111;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: #666;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>InvesTrack</h1>
-    <p class="subtitle">Connect your wallet to generate a token watchlist</p>
+    <p class="subtitle">Link your wallet or paste an address to get started</p>
 
     <button class="connect-btn" id="connectBtn" onclick="connectWallet()">
       Connect with WalletConnect
@@ -154,47 +171,50 @@
         id="addressInput"
         placeholder="0x..."
         spellcheck="false"
+        autocomplete="off"
       />
       <button onclick="submitManual()">Link</button>
     </div>
 
     <div class="status" id="status"></div>
     <div class="address-display" id="addressDisplay"></div>
+
+    <div class="tip">
+      You can also skip this step entirely. Just message the bot with
+      "add" followed by a token name (e.g. "add PEPE") to start tracking
+      tokens without connecting a wallet.
+    </div>
   </div>
 
-  <script src="https://unpkg.com/@walletconnect/modal@2.7.0/dist/index.umd.js"></script>
-  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js"></script>
-  <script>
-    var WALLETCONNECT_PROJECT_ID = "";
+  <script type="module">
+    import { createWeb3Modal, defaultConfig } from "https://esm.sh/@web3modal/ethers@5.1.11";
 
-    var params = new URLSearchParams(window.location.search);
-    var USER_ID = params.get("user_id") || "wallet_user_" + Date.now();
+    const params = new URLSearchParams(window.location.search);
+    const USER_ID = params.get("user_id") || "wallet_user_" + Date.now();
 
-    fetch("/api/config")
-      .then(function(r) { return r.json(); })
-      .then(function(cfg) { WALLETCONNECT_PROJECT_ID = cfg.walletconnect_project_id; })
-      .catch(function() {});
+    let projectId = "";
+    let modal = null;
 
     function showStatus(msg, type) {
-      var el = document.getElementById("status");
+      const el = document.getElementById("status");
       el.textContent = msg;
       el.className = "status " + type;
     }
 
     async function linkWallet(address) {
-      var resp = await fetch("/api/link-wallet", {
+      const resp = await fetch("/api/link-wallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: USER_ID, address: address }),
       });
 
-      var data = await resp.json();
+      const data = await resp.json();
 
       if (data.success) {
         document.getElementById("addressDisplay").textContent =
           "Linked: " + address;
         showStatus(
-          "Wallet linked. You can return to the chat.",
+          "Wallet linked successfully. You can return to the chat.",
           "success"
         );
       } else {
@@ -202,52 +222,100 @@
       }
     }
 
-    async function connectWallet() {
-      var btn = document.getElementById("connectBtn");
+    async function initModal() {
+      try {
+        const cfg = await fetch("/api/config").then((r) => r.json());
+        projectId = cfg.walletconnect_project_id;
+
+        if (!projectId) {
+          console.log("No WalletConnect project ID configured");
+          return;
+        }
+
+        const metadata = {
+          name: "InvesTrack",
+          description: "AI Crypto Portfolio Assistant",
+          url: window.location.origin,
+          icons: [],
+        };
+
+        const ethersConfig = defaultConfig({ metadata });
+
+        modal = createWeb3Modal({
+          ethersConfig,
+          chains: [
+            {
+              chainId: 1,
+              name: "Ethereum",
+              currency: "ETH",
+              explorerUrl: "https://etherscan.io",
+              rpcUrl: "https://eth.llamarpc.com",
+            },
+          ],
+          projectId,
+          enableAnalytics: false,
+          themeMode: "dark",
+        });
+
+        modal.subscribeProvider(({ address, isConnected }) => {
+          if (isConnected && address) {
+            linkWallet(address);
+          }
+        });
+      } catch (err) {
+        console.error("Failed to init Web3Modal:", err);
+      }
+    }
+
+    window.connectWallet = async function () {
+      const btn = document.getElementById("connectBtn");
+
+      if (!modal) {
+        // Fallback: if Web3Modal failed to init, prompt manual entry
+        showStatus(
+          "WalletConnect is not available. Please paste your wallet address below.",
+          "info"
+        );
+        document.getElementById("addressInput").focus();
+        return;
+      }
+
       btn.disabled = true;
       btn.textContent = "Connecting...";
 
       try {
-        var provider =
-          await window.WalletConnectEthereumProvider.default.init({
-            projectId: WALLETCONNECT_PROJECT_ID,
-            chains: [1],
-            showQrModal: true,
-          });
-
-        await provider.enable();
-        var accounts = provider.accounts;
-
-        if (accounts.length > 0) {
-          await linkWallet(accounts[0]);
-        }
+        await modal.open();
       } catch (err) {
-        showStatus("Connection cancelled or failed", "error");
+        showStatus("Connection failed. Try pasting your address instead.", "error");
         console.error(err);
       }
 
       btn.disabled = false;
       btn.textContent = "Connect with WalletConnect";
-    }
+    };
 
-    function submitManual() {
-      var input = document.getElementById("addressInput");
-      var address = input.value.trim();
+    window.submitManual = function () {
+      const input = document.getElementById("addressInput");
+      const address = input.value.trim();
 
       if (!address) return;
 
-      var pattern = /^0x[a-fA-F0-9]{40}$/;
+      const pattern = /^0x[a-fA-F0-9]{40}$/;
       if (!pattern.test(address)) {
         showStatus("Invalid Ethereum address format", "error");
         return;
       }
 
       linkWallet(address);
-    }
+    };
 
-    document.getElementById("addressInput").addEventListener("keydown", function(e) {
-      if (e.key === "Enter") submitManual();
-    });
+    document
+      .getElementById("addressInput")
+      .addEventListener("keydown", function (e) {
+        if (e.key === "Enter") window.submitManual();
+      });
+
+    initModal();
   </script>
 </body>
 </html>
