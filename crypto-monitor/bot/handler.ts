@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { luffaClient } from "./client";
 import { detectIntent } from "./intent";
 import { db } from "../db";
-import { getTokens } from "../services/alchemy";
+import { Token, getTokens } from "../services/alchemy";
+import { searchToken, getTokenMetadata } from "../services/coingecko";
 import {
   collectIntelForUser,
   buildIntelContext,
@@ -21,19 +22,20 @@ function buildPortfolioContext(userId: string): string {
 
   if (user?.wallet_address) {
     context += `The user has linked wallet: ${user.wallet_address}\n`;
-  } else {
-    context +=
-      "The user has NOT linked a wallet yet. Guide them to say 'connect wallet' to get started.\n";
   }
 
   if (watchlist && watchlist.tokens.length > 0) {
     const tokenList = watchlist.tokens
-      .map((t) => `- ${t.symbol} (${t.token_name}): ${t.balance.toFixed(4)}`)
+      .map((t) => {
+        const balancePart =
+          t.balance > 0 ? ` - balance: ${t.balance.toFixed(4)}` : "";
+        return `- ${t.symbol} (${t.token_name})${balancePart}`;
+      })
       .join("\n");
-    context += `\nTheir current portfolio:\n${tokenList}\n`;
-  } else if (user?.wallet_address) {
+    context += `\nTheir watchlist:\n${tokenList}\n`;
+  } else {
     context +=
-      "They have a wallet linked but no watchlist generated yet. Suggest they say 'generate watchlist' to scan their tokens.\n";
+      "The user has no tokens in their watchlist yet. They can add tokens by saying 'add' followed by a token name or contract address.\n";
   }
 
   const intelContext = buildIntelContext(userId);
@@ -47,15 +49,15 @@ function buildPortfolioContext(userId: string): string {
 async function askClaude(prompt: string, userId: string): Promise<string> {
   const portfolioContext = buildPortfolioContext(userId);
 
-  const systemPrompt = `You are InvesTrack, an AI crypto portfolio assistant on the Luffa messaging platform. Help users track and understand their Ethereum tokens.
+  const systemPrompt = `You are InvesTrack, an AI crypto portfolio assistant on the Luffa messaging platform. Help users research and track Ethereum tokens before and after they invest.
 
 ${portfolioContext}
 
 Rules:
 - Keep responses short and conversational (2-4 sentences max).
-- If they ask about their holdings, reference the actual tokens in their portfolio above.
-- If they have no wallet linked, tell them to say "connect wallet".
-- If they have a wallet but no watchlist, tell them to say "generate watchlist".
+- If they ask about their tokens, reference the watchlist and collected intelligence above.
+- Users can add tokens to track by saying "add" followed by a token name or pasting a contract address. They do not need to hold the token.
+- If their watchlist is empty, suggest they add tokens by name (e.g. "add PEPE") or by pasting a contract address.
 - If they ask about risks, signals, or red flags, reference the Collected Intelligence section above. Be specific about what was found.
 - If signal analysis has been run, mention the risk level and any red flags for relevant tokens.
 - If they ask for a report, give a structured summary of each token with risk level, key findings, and red flags.
@@ -74,6 +76,23 @@ Rules:
   return block.type === "text"
     ? block.text
     : "I could not generate a response.";
+}
+
+function addTokenToWatchlist(userId: string, token: Token): void {
+  const existing = db.getWatchlist(userId);
+  const tokens = existing ? [...existing.tokens] : [];
+
+  // Avoid duplicates
+  const alreadyExists = tokens.some(
+    (t) =>
+      t.contract_address.toLowerCase() ===
+      token.contract_address.toLowerCase()
+  );
+
+  if (!alreadyExists) {
+    tokens.push(token);
+    db.setWatchlist(userId, tokens);
+  }
 }
 
 export function registerHandlers() {
@@ -109,11 +128,89 @@ export function registerHandlers() {
           break;
         }
 
-        case "link_address": {
-          const address = msg.content.trim();
-          db.setUser(userId, { wallet_address: address.toLowerCase() });
+        case "add_token": {
+          const input = msg.content.trim();
+          const ethAddressPattern = /^0x[a-fA-F0-9]{40}$/;
+
+          // Check if input is a raw contract address
+          if (ethAddressPattern.test(input)) {
+            await msg.reply("Looking up that contract address...");
+
+            const metadata = await getTokenMetadata(input);
+            const token: Token = {
+              contract_address: input.toLowerCase(),
+              token_name: metadata?.name || "Unknown Token",
+              symbol: metadata?.symbol || input.substring(0, 8),
+              balance: 0,
+              official_twitter: metadata?.twitter_handle
+                ? `https://twitter.com/${metadata.twitter_handle}`
+                : undefined,
+              telegram_group: metadata?.telegram_url
+                ? `https://t.me/${metadata.telegram_url}`
+                : undefined,
+              website:
+                metadata?.homepage?.[0] ||
+                metadata?.website_url ||
+                undefined,
+              coingecko_id: metadata?.coingecko_id,
+            };
+
+            addTokenToWatchlist(userId, token);
+            await msg.reply(
+              `Added ${token.symbol} (${token.token_name}) to your watchlist. Say 'scan' to check for red flags.`
+            );
+            break;
+          }
+
+          // Otherwise it's "add <name>" or "track <name>" or "watch <name>"
+          const query = input
+            .replace(/^(add|track|watch)\s+/i, "")
+            .trim();
+
+          if (!query) {
+            await msg.reply(
+              "What token do you want to add? Send a name (e.g. 'add PEPE') or paste a contract address."
+            );
+            break;
+          }
+
+          await msg.reply(`Searching for "${query}"...`);
+
+          const result = await searchToken(query);
+
+          if (!result) {
+            await msg.reply(
+              `Could not find a token matching "${query}". Try the exact ticker symbol or paste the contract address.`
+            );
+            break;
+          }
+
+          // Get the Ethereum contract address from platforms
+          const ethAddress =
+            result.platforms["ethereum"] || result.platforms[""] || "";
+
+          if (!ethAddress) {
+            await msg.reply(
+              `Found ${result.symbol} (${result.name}) but it does not have an Ethereum contract address. Only Ethereum mainnet tokens are supported.`
+            );
+            break;
+          }
+
+          const token: Token = {
+            contract_address: ethAddress.toLowerCase(),
+            token_name: result.name,
+            symbol: result.symbol,
+            balance: 0,
+            coingecko_id: result.id,
+          };
+
+          addTokenToWatchlist(userId, token);
+
+          const rankInfo = result.market_cap_rank
+            ? ` (rank #${result.market_cap_rank})`
+            : "";
           await msg.reply(
-            "Wallet linked. Say 'generate watchlist' to fetch your tokens."
+            `Added ${token.symbol} (${token.token_name})${rankInfo} to your watchlist. Say 'scan' to check for red flags or 'add' another token.`
           );
           break;
         }
@@ -121,21 +218,52 @@ export function registerHandlers() {
         case "generate_watchlist": {
           const user = db.getUser(userId);
           if (!user || !user.wallet_address) {
-            const connectUrl = `${process.env.APP_URL}/connect-wallet?user_id=${userId}`;
             await msg.reply(
-              `No wallet linked yet. Connect first:\n${connectUrl}`
+              "No wallet linked. You can still add tokens manually - say 'add' followed by a token name (e.g. 'add PEPE') or paste a contract address."
             );
             break;
           }
 
+          console.log(
+            `Generating watchlist for user ${userId}, wallet: ${user.wallet_address}`
+          );
           await msg.reply("Scanning your wallet for tokens...");
 
           const tokens = await getTokens(user.wallet_address);
-          db.setWatchlist(userId, tokens);
+
+          // Merge with existing watchlist instead of replacing
+          const existing = db.getWatchlist(userId);
+          const existingAddresses = new Set(
+            (existing?.tokens || []).map((t) =>
+              t.contract_address.toLowerCase()
+            )
+          );
+
+          let newCount = 0;
+          for (const token of tokens) {
+            if (
+              !existingAddresses.has(
+                token.contract_address.toLowerCase()
+              )
+            ) {
+              addTokenToWatchlist(userId, token);
+              newCount++;
+            }
+          }
+
+          const watchlist = db.getWatchlist(userId);
+          const total = watchlist?.tokens.length || 0;
+
+          if (tokens.length === 0 && total === 0) {
+            await msg.reply(
+              "No tokens found in your wallet. You can add tokens manually - say 'add' followed by a token name or paste a contract address."
+            );
+            break;
+          }
 
           if (tokens.length === 0) {
             await msg.reply(
-              "No tokens found in your wallet after filtering spam and dust."
+              `No new tokens found in your wallet, but you have ${total} tokens in your watchlist already. Say 'scan' to check for red flags.`
             );
             break;
           }
@@ -145,7 +273,7 @@ export function registerHandlers() {
               `${t.symbol} (${t.token_name}): ${t.balance.toFixed(4)}`
           );
           await msg.reply(
-            `Found ${tokens.length} tokens:\n\n${lines.join("\n")}\n\nCollecting project data in the background. Say 'scan' when ready to check for red flags.`
+            `Found ${tokens.length} tokens in your wallet (${newCount} new):\n\n${lines.join("\n")}\n\nCollecting project data in the background. Say 'scan' when ready to check for red flags.`
           );
 
           collectIntelForUser(userId).catch((err) => {
@@ -158,14 +286,16 @@ export function registerHandlers() {
           const watchlist = db.getWatchlist(userId);
           if (!watchlist || watchlist.tokens.length === 0) {
             await msg.reply(
-              "Your watchlist is empty. Say 'generate watchlist' to build one from your wallet."
+              "Your watchlist is empty. Say 'add' followed by a token name (e.g. 'add PEPE') or paste a contract address to start tracking."
             );
             break;
           }
 
-          const lines = watchlist.tokens.map(
-            (t) => `${t.symbol} (${t.token_name})`
-          );
+          const lines = watchlist.tokens.map((t) => {
+            const balancePart =
+              t.balance > 0 ? ` - ${t.balance.toFixed(4)}` : "";
+            return `${t.symbol} (${t.token_name})${balancePart}`;
+          });
           await msg.reply(
             `Your watchlist (${watchlist.tokens.length} tokens):\n\n${lines.join("\n")}`
           );
@@ -173,18 +303,10 @@ export function registerHandlers() {
         }
 
         case "scan_signals": {
-          const user = db.getUser(userId);
-          if (!user?.wallet_address) {
-            await msg.reply(
-              "Link a wallet first, then generate a watchlist before scanning for signals."
-            );
-            break;
-          }
-
           const watchlist = db.getWatchlist(userId);
           if (!watchlist || watchlist.tokens.length === 0) {
             await msg.reply(
-              "Generate a watchlist first by saying 'generate watchlist'."
+              "Your watchlist is empty. Add tokens first by saying 'add' followed by a token name or paste a contract address."
             );
             break;
           }
@@ -208,7 +330,9 @@ export function registerHandlers() {
           );
 
           if (flaggedTokens.length === 0) {
-            const analyzed = intelEntries.filter((i) => i.signals).length;
+            const analyzed = intelEntries.filter(
+              (i) => i.signals
+            ).length;
             await msg.reply(
               `Scan complete. Analyzed ${analyzed} of ${watchlist.tokens.length} tokens. No high-risk signals detected. Say 'report' for a detailed breakdown.`
             );
@@ -238,7 +362,9 @@ export function registerHandlers() {
         case "token_report": {
           const watchlist = db.getWatchlist(userId);
           if (!watchlist || watchlist.tokens.length === 0) {
-            await msg.reply("No watchlist found. Generate one first.");
+            await msg.reply(
+              "No tokens in your watchlist. Add some first by saying 'add' followed by a token name."
+            );
             break;
           }
 
@@ -256,7 +382,7 @@ export function registerHandlers() {
     } catch (err) {
       console.error("Handler error:", err);
       await msg.reply(
-        "Something went wrong. Try again or say 'connect wallet' to start."
+        "Something went wrong. Try again or say 'add' followed by a token name to start."
       );
     }
   });

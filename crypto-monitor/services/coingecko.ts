@@ -109,3 +109,68 @@ export async function enrichTokensWithMetadata(
 
   return tokens;
 }
+
+export interface CoinGeckoSearchResult {
+  id: string;
+  name: string;
+  symbol: string;
+  market_cap_rank: number | null;
+  platforms: Record<string, string>;
+}
+
+export async function searchToken(
+  query: string
+): Promise<CoinGeckoSearchResult | null> {
+  const url = `${COINGECKO_BASE}/search?query=${encodeURIComponent(query)}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const coins = data.coins || [];
+
+    if (coins.length === 0) return null;
+
+    // Find the best match - prefer exact symbol match, then first result
+    const normalized = query.toUpperCase();
+    const exactMatch = coins.find(
+      (c: any) => c.symbol?.toUpperCase() === normalized
+    );
+    const best = exactMatch || coins[0];
+
+    // Now fetch full coin data to get the ethereum platform contract address
+    await sleep(RATE_LIMIT_DELAY_MS);
+
+    const coinRes = await fetch(`${COINGECKO_BASE}/coins/${best.id}`, {
+      headers: { Accept: "application/json" },
+    });
+
+    if (!coinRes.ok) {
+      return {
+        id: best.id,
+        name: best.name,
+        symbol: (best.symbol || "").toUpperCase(),
+        market_cap_rank: best.market_cap_rank || null,
+        platforms: {},
+      };
+    }
+
+    const coinData = await coinRes.json();
+    const platforms = coinData.platforms || {};
+
+    return {
+      id: best.id,
+      name: coinData.name || best.name,
+      symbol: (coinData.symbol || best.symbol || "").toUpperCase(),
+      market_cap_rank: coinData.market_cap_rank || null,
+      platforms,
+    };
+  } catch (err) {
+    console.error(`CoinGecko search failed for "${query}":`, err);
+    return null;
+  }
+}
