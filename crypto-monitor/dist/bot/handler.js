@@ -9,8 +9,8 @@ async function askClaude(prompt) {
     if (!apiKey) {
         throw new Error('Missing CLAUDE_API_KEY in environment variables');
     }
-    const apiUrl = process.env.CLAUDE_API_URL || 'https://api.anthropic.com/v1/complete';
-    const model = process.env.CLAUDE_MODEL || 'claude-2.1';
+    const apiUrl = 'https://api.anthropic.com/v1/messages';
+    const model = process.env.CLAUDE_MODEL || 'claude-3-haiku-20240307';
     const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -20,10 +20,11 @@ async function askClaude(prompt) {
         },
         body: JSON.stringify({
             model,
-            prompt: `Human: ${prompt}\n\nAssistant:`,
-            max_tokens_to_sample: Number(process.env.CLAUDE_MAX_TOKENS || 500),
-            temperature: Number(process.env.CLAUDE_TEMPERATURE || 0.5),
-            stop_sequences: ['\n\nHuman:'],
+            max_tokens: Number(process.env.CLAUDE_MAX_TOKENS || 1000),
+            system: 'You are InvesTrack, an AI-powered investment bot specializing in cryptocurrency tracking, analysis, and portfolio management. Always introduce yourself as InvesTrack when starting conversations.',
+            messages: [
+                { role: 'user', content: prompt }
+            ],
         }),
     });
     if (!response.ok) {
@@ -31,7 +32,7 @@ async function askClaude(prompt) {
         throw new Error(`Claude API error ${response.status}: ${errorText}`);
     }
     const data = await response.json();
-    return (data.completion || data.completion_text || '').trim() || 'Sorry, I could not generate a response.';
+    return (data.content?.[0]?.text || '').trim() || 'Sorry, I could not generate a response.';
 }
 function registerHandlers() {
     client_1.luffaClient.onMessage(async (msg) => {
