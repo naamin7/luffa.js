@@ -38,7 +38,9 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.80.0"
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@types/ws": "^8.18.1",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0"
