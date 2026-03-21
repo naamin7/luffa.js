@@ -27,7 +27,7 @@ export function registerHandlers() {
           dismissType: "select"
         });
       } else {
-        // error handling)
+        // error handling 
         await msg.reply(
           `Import your portfolio automatically.\n\nConnect your wallet here:\n${connectUrl}`
         );
