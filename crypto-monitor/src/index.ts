@@ -14,10 +14,10 @@ app.use(express.json());
 
 app.use("/api", apiRoutes);
 
-app.use(express.static(path.join(__dirname, "../../public")));
+app.use(express.static(path.join(__dirname, "../public")));
 
 app.get("/connect-wallet", (_req, res) => {
-  res.sendFile(path.join(__dirname, "../../public/connect.html"));
+  res.sendFile(path.join(__dirname, "../public/connect.html"));
 });
 
 app.get("/health", (_req, res) => {
