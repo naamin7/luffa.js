@@ -2,6 +2,40 @@ import { luffaClient } from './client';
 import { detectIntent } from './intent';
 import { db } from '../db';
 
+async function askClaude(prompt: string): Promise<string> {
+  const apiKey = process.env.CLAUDE_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing CLAUDE_API_KEY in environment variables');
+  }
+
+  const apiUrl = process.env.CLAUDE_API_URL || 'https://api.anthropic.com/v1/complete';
+  const model = process.env.CLAUDE_MODEL || 'claude-2.1';
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      prompt: `Human: ${prompt}\n\nAssistant:`,
+      max_tokens_to_sample: Number(process.env.CLAUDE_MAX_TOKENS || 500),
+      temperature: Number(process.env.CLAUDE_TEMPERATURE || 0.5),
+      stop_sequences: ['\n\nHuman:'],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Claude API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return (data.completion || data.completion_text || '').trim() || 'Sorry, I could not generate a response.';
+}
+
 export function registerHandlers() {
   luffaClient.onMessage(async (msg: any) => {
     const userId = msg.authorId;
@@ -36,11 +70,24 @@ export function registerHandlers() {
     }
 
     if (intent === 'unknown') {
-      await msg.reply("Say 'connect wallet' to link your portfolio and start tracking tokens.");
+      // If user message isn't a known command, pass to Claude for an AI-driven reply.
+      try {
+        const aiReply = await askClaude(msg.content);
+        await msg.reply(aiReply);
+      } catch (err) {
+        console.error('Claude reply failed:', err);
+        await msg.reply("Say 'connect wallet' to link your portfolio and start tracking tokens.");
+      }
       return;
     }
 
-    // For all other messages (non-connect commands), show a fixed reply.
-    await msg.reply("Say 'connect wallet' to link your portfolio and start tracking tokens.");
+    // For all other messages (non-connect commands), ask Claude too.
+    try {
+      const aiReply = await askClaude(msg.content);
+      await msg.reply(aiReply);
+    } catch (err) {
+      console.error('Claude reply failed:', err);
+      await msg.reply("Sorry, I couldn't generate an AI response right now. Please try again later.");
+    }
   });
 }

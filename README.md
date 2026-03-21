@@ -28,9 +28,25 @@ const client = new Client({
 });
 ```
 
-## Bot behavior update
+## Claude AI Assistant (optional)
 
-This project no longer uses Claude AI for fallback responses. Incoming messages that are not `connect wallet` will receive a static guidance message to use the connect wallet flow.
+Add a Claude API key to enable generative responses for incoming messages:
+
+- `CLAUDE_API_KEY` (required)
+- `CLAUDE_API_URL` (optional, default: `https://api.anthropic.com/v1/complete`)
+- `CLAUDE_MODEL` (optional, default: `claude-2.1`)
+- `CLAUDE_MAX_TOKENS` (optional, default: `500`)
+- `CLAUDE_TEMPERATURE` (optional, default: `0.5`)
+
+Example `.env`:
+
+```
+LUFFA_SECRET=your_luffa_secret
+CLAUDE_API_KEY=sk-xxxxx
+APP_URL=https://your-app.url
+```
+
+Incoming messages that are not handled by custom commands now pass through Claude and the bot replies with the generated completion.
 
 ## API
 
