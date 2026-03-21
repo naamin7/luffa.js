@@ -135,39 +135,80 @@ export async function searchToken(
 
     if (coins.length === 0) return null;
 
-    // Find the best match - prefer exact symbol match, then first result
+    // Build a ranked list of candidates:
+    // 1. Exact symbol matches first, then partial/name matches
+    // 2. Within each group, prefer higher market cap rank
     const normalized = query.toUpperCase();
-    const exactMatch = coins.find(
+    const exactMatches = coins.filter(
       (c: any) => c.symbol?.toUpperCase() === normalized
     );
-    const best = exactMatch || coins[0];
+    const candidates =
+      exactMatches.length > 0 ? exactMatches : coins.slice(0, 5);
 
-    // Now fetch full coin data to get the ethereum platform contract address
+    // Try each candidate until we find one with an Ethereum contract
+    for (const candidate of candidates) {
+      await sleep(RATE_LIMIT_DELAY_MS);
+
+      const coinRes = await fetch(
+        `${COINGECKO_BASE}/coins/${candidate.id}`,
+        { headers: { Accept: "application/json" } }
+      );
+
+      if (!coinRes.ok) continue;
+
+      const coinData = await coinRes.json();
+      const platforms = coinData.platforms || {};
+
+      // Check if this token has an Ethereum contract
+      if (platforms["ethereum"]) {
+        console.log(
+          `CoinGecko search "${query}": matched ${coinData.name} (${coinData.symbol}) on Ethereum`
+        );
+        return {
+          id: candidate.id,
+          name: coinData.name || candidate.name,
+          symbol: (
+            coinData.symbol ||
+            candidate.symbol ||
+            ""
+          ).toUpperCase(),
+          market_cap_rank: coinData.market_cap_rank || null,
+          platforms,
+        };
+      }
+    }
+
+    // Fallback: return the first result even without Ethereum contract
+    // so the user gets a clear error about it not being on Ethereum
+    const fallback = coins[0];
     await sleep(RATE_LIMIT_DELAY_MS);
 
-    const coinRes = await fetch(`${COINGECKO_BASE}/coins/${best.id}`, {
-      headers: { Accept: "application/json" },
-    });
+    const fallbackRes = await fetch(
+      `${COINGECKO_BASE}/coins/${fallback.id}`,
+      { headers: { Accept: "application/json" } }
+    );
 
-    if (!coinRes.ok) {
+    if (!fallbackRes.ok) {
       return {
-        id: best.id,
-        name: best.name,
-        symbol: (best.symbol || "").toUpperCase(),
-        market_cap_rank: best.market_cap_rank || null,
+        id: fallback.id,
+        name: fallback.name,
+        symbol: (fallback.symbol || "").toUpperCase(),
+        market_cap_rank: fallback.market_cap_rank || null,
         platforms: {},
       };
     }
 
-    const coinData = await coinRes.json();
-    const platforms = coinData.platforms || {};
-
+    const fallbackData = await fallbackRes.json();
     return {
-      id: best.id,
-      name: coinData.name || best.name,
-      symbol: (coinData.symbol || best.symbol || "").toUpperCase(),
-      market_cap_rank: coinData.market_cap_rank || null,
-      platforms,
+      id: fallback.id,
+      name: fallbackData.name || fallback.name,
+      symbol: (
+        fallbackData.symbol ||
+        fallback.symbol ||
+        ""
+      ).toUpperCase(),
+      market_cap_rank: fallbackData.market_cap_rank || null,
+      platforms: fallbackData.platforms || {},
     };
   } catch (err) {
     console.error(`CoinGecko search failed for "${query}":`, err);
