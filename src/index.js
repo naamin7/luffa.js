@@ -8,7 +8,7 @@ export * as Constants from "./util/constants.js";
 import { Client } from "luffa.js";
 
 const client = new Client({
-  secret: "your_robot_secret",
+  secret: "09c9afa298ff4f9bb115e5d911f4ef3b",
   pollInterval: 1000 // ms, optional
 });
 
