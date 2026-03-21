@@ -16,7 +16,7 @@ client.onMessage(async (message) => {
   console.log(`${message.authorId}: ${message.content}`);
   
   // Reply to messages
-  await message.reply("Thanks for your message!");
+  await message.reply("Hi, I'm InvesTrack!");
 });
 
 // Start the client

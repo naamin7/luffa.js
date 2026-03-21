@@ -26,6 +26,29 @@ const client = new Client({
   secret: "your_robot_secret",
   pollInterval: 1000 // ms, optional
 });
+```
+
+## Claude AI Assistant (optional)
+
+Add a Claude API key to enable generative responses for incoming messages:
+
+- `CLAUDE_API_KEY` (required)
+- `CLAUDE_API_URL` (optional, default: `https://api.anthropic.com/v1/complete`)
+- `CLAUDE_MODEL` (optional, default: `claude-2.1`)
+- `CLAUDE_MAX_TOKENS` (optional, default: `500`)
+- `CLAUDE_TEMPERATURE` (optional, default: `0.5`)
+
+Example `.env`:
+
+```
+LUFFA_SECRET=your_luffa_secret
+CLAUDE_API_KEY=sk-xxxxx
+APP_URL=https://your-app.url
+```
+
+Incoming messages that are not handled by custom commands now pass through Claude and the bot replies with the generated completion.
+
+## API
 
 client.onMessage(async (message) => {
   console.log(`${message.authorId}: ${message.content}`);
