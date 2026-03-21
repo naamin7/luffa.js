@@ -32,10 +32,7 @@ client.onMessage(async (msg) => {
     return;
   }
 
-  // After the wallet is linked, this fires from /api/link-wallet... also: (see db event pattern below)
-
-  // Fallback: static guidance instead of AI-generated text.
-  await msg.reply("Say 'connect wallet' to link your portfolio and start tracking tokens.");
+  // After th wallet is linked, this fires from /api/link-wallet... also: (see db event pattern below)
 });
 
 client.start().then(() => {
