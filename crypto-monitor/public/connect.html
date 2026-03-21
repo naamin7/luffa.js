@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InvesTrack - Connect Wallet</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 420px;
+      width: 100%;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      color: #888;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+
+    .connect-btn {
+      width: 100%;
+      padding: 0.875rem 1.5rem;
+      background: #6d28d9;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .connect-btn:hover { background: #7c3aed; }
+    .connect-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin: 1.5rem 0;
+      color: #555;
+      font-size: 0.75rem;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: #333;
+    }
+
+    .manual-input {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .manual-input input {
+      flex: 1;
+      padding: 0.75rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #e5e5e5;
+      font-size: 0.875rem;
+      font-family: monospace;
+    }
+
+    .manual-input input:focus {
+      outline: none;
+      border-color: #6d28d9;
+    }
+
+    .manual-input button {
+      padding: 0.75rem 1rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #e5e5e5;
+      font-size: 0.875rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .manual-input button:hover { border-color: #6d28d9; }
+
+    .status {
+      margin-top: 1.5rem;
+      padding: 0.75rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      display: none;
+    }
+
+    .status.success {
+      display: block;
+      background: #052e16;
+      color: #4ade80;
+      border: 1px solid #166534;
+    }
+
+    .status.error {
+      display: block;
+      background: #2a0a0a;
+      color: #f87171;
+      border: 1px solid #991b1b;
+    }
+
+    .address-display {
+      margin-top: 1rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: #888;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>InvesTrack</h1>
+    <p class="subtitle">Connect your wallet to generate a token watchlist</p>
+
+    <button class="connect-btn" id="connectBtn" onclick="connectWallet()">
+      Connect with WalletConnect
+    </button>
+
+    <div class="divider">or paste your address</div>
+
+    <div class="manual-input">
+      <input
+        type="text"
+        id="addressInput"
+        placeholder="0x..."
+        spellcheck="false"
+      />
+      <button onclick="submitManual()">Link</button>
+    </div>
+
+    <div class="status" id="status"></div>
+    <div class="address-display" id="addressDisplay"></div>
+  </div>
+
+  <script src="https://unpkg.com/@walletconnect/modal@2.7.0/dist/index.umd.js"></script>
+  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js"></script>
+  <script>
+    var WALLETCONNECT_PROJECT_ID = "";
+
+    var params = new URLSearchParams(window.location.search);
+    var USER_ID = params.get("user_id") || "wallet_user_" + Date.now();
+
+    fetch("/api/config")
+      .then(function(r) { return r.json(); })
+      .then(function(cfg) { WALLETCONNECT_PROJECT_ID = cfg.walletconnect_project_id; })
+      .catch(function() {});
+
+    function showStatus(msg, type) {
+      var el = document.getElementById("status");
+      el.textContent = msg;
+      el.className = "status " + type;
+    }
+
+    async function linkWallet(address) {
+      var resp = await fetch("/api/link-wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: USER_ID, address: address }),
+      });
+
+      var data = await resp.json();
+
+      if (data.success) {
+        document.getElementById("addressDisplay").textContent =
+          "Linked: " + address;
+        showStatus(
+          "Wallet linked. You can return to the chat.",
+          "success"
+        );
+      } else {
+        showStatus(data.error || "Failed to link wallet", "error");
+      }
+    }
+
+    async function connectWallet() {
+      var btn = document.getElementById("connectBtn");
+      btn.disabled = true;
+      btn.textContent = "Connecting...";
+
+      try {
+        var provider =
+          await window.WalletConnectEthereumProvider.default.init({
+            projectId: WALLETCONNECT_PROJECT_ID,
+            chains: [1],
+            showQrModal: true,
+          });
+
+        await provider.enable();
+        var accounts = provider.accounts;
+
+        if (accounts.length > 0) {
+          await linkWallet(accounts[0]);
+        }
+      } catch (err) {
+        showStatus("Connection cancelled or failed", "error");
+        console.error(err);
+      }
+
+      btn.disabled = false;
+      btn.textContent = "Connect with WalletConnect";
+    }
+
+    function submitManual() {
+      var input = document.getElementById("addressInput");
+      var address = input.value.trim();
+
+      if (!address) return;
+
+      var pattern = /^0x[a-fA-F0-9]{40}$/;
+      if (!pattern.test(address)) {
+        showStatus("Invalid Ethereum address format", "error");
+        return;
+      }
+
+      linkWallet(address);
+    }
+
+    document.getElementById("addressInput").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") submitManual();
+    });
+  </script>
+</body>
+</html>

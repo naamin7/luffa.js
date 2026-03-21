@@ -1,13 +1,15 @@
-interface User {
+import { Token } from "./services/alchemy";
+
+export interface User {
   user_id: string;
   wallet_address?: string;
-  channelId?: string;   
+  channelId?: string;
   isGroup?: boolean;
 }
 
-interface Watchlist {
+export interface Watchlist {
   user_id: string;
-  tokens: string[];
+  tokens: Token[];
 }
 
 const users = new Map<string, User>();
@@ -19,7 +21,7 @@ export const db = {
     users.set(user_id, { ...existing, ...data });
   },
   getUser: (user_id: string) => users.get(user_id),
-  setWatchlist: (user_id: string, tokens: string[]) => {
+  setWatchlist: (user_id: string, tokens: Token[]) => {
     watchlists.set(user_id, { user_id, tokens });
   },
   getWatchlist: (user_id: string) => watchlists.get(user_id),
