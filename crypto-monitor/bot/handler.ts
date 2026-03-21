@@ -2,41 +2,6 @@ import { luffaClient } from './client';
 import { detectIntent } from './intent';
 import { db } from '../db';
 
-async function askClaude(prompt: string): Promise<string> {
-  const apiKey = process.env.CLAUDE_API_KEY;
-  if (!apiKey) {
-    throw new Error('Missing CLAUDE_API_KEY in environment variables');
-  }
-
-  const apiUrl = 'https://api.anthropic.com/v1/messages';
-  const model = process.env.CLAUDE_MODEL || 'claude-3-haiku-20240307';
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: Number(process.env.CLAUDE_MAX_TOKENS || 1000),
-      system: 'You are InvesTrack, an AI-powered investment bot specializing in cryptocurrency tracking, analysis, and portfolio management. Always introduce yourself as InvesTrack when starting conversations.',
-      messages: [
-        { role: 'user', content: prompt }
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Claude API error ${response.status}: ${errorText}`);
-  }
-
-  const data = await response.json();
-  return (data.content?.[0]?.text || '').trim() || 'Sorry, I could not generate a response.';
-}
-
 export function registerHandlers() {
   luffaClient.onMessage(async (msg: any) => {
     const userId = msg.authorId;
