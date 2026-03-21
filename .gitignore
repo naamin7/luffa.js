@@ -2,15 +2,20 @@ node_modules/
 dist/
 *.log
 
-# Environment and secrets
+# Environment and secrets - NEVER commit these
 .env
 .env.*
+.env.local
+.env.production
+.env.development
 *.pem
 *.key
+*.secret
 
-# API keys and secrets (prevent accidental commits)
-# LUFFA_SECRET
-# ALCHEMY_API_KEY
-# WALLETCONNECT_PROJECT_ID
-# CLAUDE_API_KEY
-# APP_URL
+# Prevent accidental secret leaks
+# Required env vars (set in .env, never hardcode):
+#   LUFFA_SECRET
+#   ALCHEMY_API_KEY
+#   WALLETCONNECT_PROJECT_ID
+#   CLAUDE_API_KEY (sk-ant-*)
+#   APP_URL
