@@ -130,17 +130,20 @@ export function registerHandlers() {
 
         case "add_token": {
           const input = msg.content.trim();
-          const ethAddressPattern = /^0x[a-fA-F0-9]{40}$/;
 
-          // Check if input is a raw contract address
-          if (ethAddressPattern.test(input)) {
+          // Try to extract a 0x address from anywhere in the message
+          const addressMatch = input.match(/0x[a-fA-F0-9]{40}/);
+
+          if (addressMatch) {
+            const contractAddr = addressMatch[0];
+            console.log(`Adding token by contract address: ${contractAddr}`);
             await msg.reply("Looking up that contract address...");
 
-            const metadata = await getTokenMetadata(input);
+            const metadata = await getTokenMetadata(contractAddr);
             const token: Token = {
-              contract_address: input.toLowerCase(),
+              contract_address: contractAddr.toLowerCase(),
               token_name: metadata?.name || "Unknown Token",
-              symbol: metadata?.symbol || input.substring(0, 8),
+              symbol: metadata?.symbol || contractAddr.substring(0, 8),
               balance: 0,
               official_twitter: metadata?.twitter_handle
                 ? `https://twitter.com/${metadata.twitter_handle}`
@@ -174,6 +177,7 @@ export function registerHandlers() {
             break;
           }
 
+          console.log(`Searching CoinGecko for: "${query}"`);
           await msg.reply(`Searching for "${query}"...`);
 
           const result = await searchToken(query);

@@ -19,8 +19,8 @@ export function detectIntent(text: string): Intent {
     return "connect_wallet";
   }
 
-  // Standalone contract address -> add it to watchlist directly
-  if (/^0x[a-fA-F0-9]{40}$/.test(normalized)) {
+  // Message contains a contract address anywhere -> add it to watchlist
+  if (/0x[a-fA-F0-9]{40}/.test(normalized)) {
     return "add_token";
   }
 
