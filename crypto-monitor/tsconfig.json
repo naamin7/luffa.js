@@ -11,6 +11,6 @@
     "types": ["node"],
     "lib": ["ES2020", "DOM"]
   },
-  "include": ["src/**/*", "bot/**/*", "**/*.d.ts"],
+  "include": ["src/**/*", "bot/**/*", "api/**/*", "services/**/*", "**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
