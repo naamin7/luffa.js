@@ -3,13 +3,14 @@
     "target": "ES2020",
     "module": "commonjs",
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    "types": ["node"],
     "lib": ["ES2020", "DOM"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "bot/**/*", "**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
