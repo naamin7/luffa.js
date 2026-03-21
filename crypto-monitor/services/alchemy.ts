@@ -20,6 +20,11 @@ export interface Token {
   token_name: string;
   symbol: string;
   balance: number;
+  official_twitter?: string;
+  telegram_group?: string;
+  website?: string;
+  aliases?: string[];
+  coingecko_id?: string;
 }
 
 export async function getTokens(address: string): Promise<Token[]> {

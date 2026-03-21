@@ -3,6 +3,8 @@ export type Intent =
   | "link_address"
   | "generate_watchlist"
   | "get_watchlist"
+  | "scan_signals"
+  | "token_report"
   | "unknown";
 
 export function detectIntent(text: string): Intent {
@@ -36,6 +38,25 @@ export function detectIntent(text: string): Intent {
     normalized.includes("watchlist")
   ) {
     return "get_watchlist";
+  }
+
+  if (
+    normalized.includes("scan") ||
+    normalized.includes("check risks") ||
+    normalized.includes("red flags") ||
+    normalized.includes("analyze") ||
+    normalized.includes("signals")
+  ) {
+    return "scan_signals";
+  }
+
+  if (
+    normalized.includes("report") ||
+    normalized.includes("intel") ||
+    normalized.includes("research") ||
+    normalized.includes("tell me about")
+  ) {
+    return "token_report";
   }
 
   return "unknown";
