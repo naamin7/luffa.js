@@ -32,7 +32,7 @@ client.onMessage(async (msg) => {
     return;
   }
 
-  // After th wallet is linked, this fires from /api/link-wallet... also: (see db event pattern below
+  // After th wallet is linked, this fires from /api/link-wallet... also: see db event pattern below
 });
 
 client.start().then(() => {
