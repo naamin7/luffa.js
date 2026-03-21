@@ -49,14 +49,15 @@ function buildPortfolioContext(userId: string): string {
 async function askClaude(prompt: string, userId: string): Promise<string> {
   const portfolioContext = buildPortfolioContext(userId);
 
-  const systemPrompt = `You are InvesTrack, an AI crypto portfolio assistant on the Luffa messaging platform. Help users research and track Ethereum tokens before and after they invest.
+  const systemPrompt = `You are InvesTrack, an AI crypto portfolio assistant on the Luffa messaging platform. Help users research and track Ethereum tokens before and after they invest. You are beginner-friendly and designed for people who want to research tokens BEFORE putting money in.
 
 ${portfolioContext}
 
 Rules:
 - Keep responses short and conversational (2-4 sentences max).
-- FIRST PRIORITY: If the user has NOT linked a wallet yet, always guide them to say "connect wallet" first. This is the starting point.
-- SECOND PRIORITY: Once a wallet is linked, if their watchlist is empty, guide them to add tokens by saying "add" followed by a token name (e.g. "add PEPE") or by pasting a contract address.
+- FIRST PRIORITY: If the user has NOT linked a wallet yet, guide them to say "connect wallet" to optionally link their wallet. Explain that connecting pulls in any tokens they hold, but it is optional.
+- SECOND PRIORITY: Guide users to add tokens they want to research by saying "add" followed by a token name (e.g. "add PEPE") or by pasting a contract address. This works whether or not a wallet is connected. Emphasize they do NOT need to own a token to track and research it.
+- IMPORTANT: Wallet connection only reads on-chain token balances. It cannot access wallet app watchlists (Trust Wallet, MetaMask, etc.) because those are stored locally on the device. If a user connects a wallet but their watchlist appears empty, explain this and tell them to add tokens manually.
 - If they ask about their tokens, reference the watchlist and collected intelligence above.
 - If they ask about risks, signals, or red flags, reference the Collected Intelligence section above. Be specific about what was found.
 - If signal analysis has been run, mention the risk level and any red flags for relevant tokens.
@@ -68,8 +69,7 @@ Rules:
   const response = await anthropic.messages.create({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514",
     max_tokens: Number(process.env.CLAUDE_MAX_TOKENS || 500),
-    system:
-      "You are InvesTrack, an AI crypto portfolio assistant. Help users track their Ethereum tokens. Keep responses short and direct.",
+    system: systemPrompt,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -166,9 +166,10 @@ export function registerHandlers() {
             break;
           }
 
-          // Otherwise it's "add <name>" or "track <name>" or "watch <name>"
+          // Otherwise it's "add <name>", "track <name>", "watch <name>", or "$TICKER"
           const query = input
             .replace(/^(add|track|watch)\s+/i, "")
+            .replace(/^\$/, "")
             .trim();
 
           if (!query) {
@@ -261,14 +262,14 @@ export function registerHandlers() {
 
           if (tokens.length === 0 && total === 0) {
             await msg.reply(
-              "No tokens found in your wallet. You can add tokens manually - say 'add' followed by a token name or paste a contract address."
+              "Your wallet has no token balances on-chain. Note: wallet app watchlists (Trust Wallet, MetaMask, etc.) are stored locally on your device and can't be read remotely.\n\nTo add tokens you're researching, just say 'add' followed by a token name (e.g. 'add PEPE' or 'add DIP'). You don't need to own them."
             );
             break;
           }
 
           if (tokens.length === 0) {
             await msg.reply(
-              `No new tokens found in your wallet, but you have ${total} tokens in your watchlist already. Say 'scan' to check for red flags.`
+              `No new tokens found in your wallet, but you have ${total} tokens in your watchlist already. Say 'scan' to check for red flags or 'add' to track more tokens.`
             );
             break;
           }

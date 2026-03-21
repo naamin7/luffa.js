@@ -77,7 +77,7 @@ async function collectSingleToken(token: Token): Promise<void> {
 
     if (token.website) {
       console.log(`Scraping website for ${token.symbol}: ${token.website}`);
-      intel.website_text = await scrapeWebsite(token.website);
+      intel.website_text = (await scrapeWebsite(token.website)) || undefined;
     }
 
     const parts: string[] = [];

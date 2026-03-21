@@ -33,6 +33,11 @@ export function detectIntent(text: string): Intent {
     return "add_token";
   }
 
+  // "$TICKER" style (common in crypto wallets and chat)
+  if (/^\$[a-zA-Z]{2,10}$/.test(normalized)) {
+    return "add_token";
+  }
+
   if (
     normalized.includes("generate watchlist") ||
     normalized.includes("show my tokens") ||

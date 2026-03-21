@@ -2,10 +2,11 @@ import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { Token, getTokens } from "../services/alchemy";
 import { searchToken, getTokenMetadata } from "../services/coingecko";
+import { luffaClient } from "../bot/client";
 
 const router = Router();
 
-router.post("/link-wallet", (req: Request, res: Response) => {
+router.post("/link-wallet", async (req: Request, res: Response) => {
   const { user_id, address } = req.body;
 
   if (!user_id || !address) {
@@ -20,6 +21,22 @@ router.post("/link-wallet", (req: Request, res: Response) => {
   }
 
   db.setUser(user_id, { wallet_address: address.toLowerCase() });
+
+  // Send a follow-up message to the user in chat
+  const user = db.getUser(user_id);
+  if (user?.channelId) {
+    const followUp =
+      "Wallet connected successfully.\n\nNow add tokens you want to research by saying 'add' followed by the token name or ticker. For example:\n- add PEPE\n- add DIP\n- Or paste a contract address\n\nYou don't need to own the token to track it.";
+    try {
+      if (user.isGroup) {
+        await luffaClient.rest.sendGroup(user.channelId, { text: followUp }, 1);
+      } else {
+        await luffaClient.rest.send(user.channelId, followUp);
+      }
+    } catch (err) {
+      console.error("Failed to send wallet-connected follow-up:", err);
+    }
+  }
 
   res.json({ success: true });
 });
