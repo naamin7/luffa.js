@@ -1,6 +1,8 @@
-import { Client } from 'luffa.js';
+import dotenv from "dotenv";
+dotenv.config(); // ✅ load .env FIRST
 
-export const luffaClient = new Client({
-  secret: process.env.LUFFA_SECRET!,
-  pollInterval: 1000,
-});
+import { Client } from "luffa.js";
+
+const client = new Client({ secret: process.env.LUFFA_SECRET });
+
+export default client;
